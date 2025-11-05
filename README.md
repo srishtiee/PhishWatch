@@ -1,6 +1,7 @@
-## PhishWatch Backend (FastAPI)
+# PhishWatch
+## Backend (FastAPI)
 
-Backend for classifying email headers/.eml files as phishing vs benign.
+Backend for classifying email headers/.eml files as phishing or genuine.
 
 ### Stack
 - FastAPI, Auth0 (JWT), MongoDB (Motor + GridFS)
@@ -36,4 +37,3 @@ Authorization: `Authorization: Bearer <JWT>` from Auth0.
 ### Notes
 - Text and files are encrypted before storage. Files use GridFS with per-file nonce metadata.
 - Analysis calls are stubbed; integrate with the ML service later in `app/services/analysis_client.py`.
-# PhishWatch
