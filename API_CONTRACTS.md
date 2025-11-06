@@ -1,6 +1,6 @@
 # PhishWatch Backend API Contracts
 
-Base URL: `http://localhost:8000` (or your deployed URL)
+Base URL: `http://localhost:8000`
 
 All endpoints except `/health` require authentication via Auth0 JWT token.
 
@@ -321,7 +321,7 @@ or
 
 3. **File Storage:** Uploaded `.eml` files are stored in MongoDB GridFS with encryption. The file ID is stored in `eml_file_id` field.
 
-4. **ML Integration:** The `result` field currently contains stub data. Replace the `AnalysisClient` implementation in `app/services/analysis_client.py` to integrate with your ML service.
+4. **ML Integration:** The `result` field currently contains stub data. Replace the `AnalysisClient` implementation in `app/services/analysis_client.py` to integrate with the ML service.
 
 5. **Status Values:**
    - `pending`: Analysis is queued/processing
