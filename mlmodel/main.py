@@ -12,12 +12,13 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from scipy.sparse import hstack, csr_matrix
 import warnings
 
-# --- 1. Initialize FastAPI App ---
+THRESHOLD = 0.75 #THRESHOLD FOR CLASSIFYING AS PHISHING
+
+# Initialize FastAPI App
 app = FastAPI(title="Phishing Detection API", version="1.0")
 warnings.filterwarnings('ignore')
 
-# --- 2. Load All Model "Tools" on Startup ---
-# This is done once when the app starts, not for every request
+#Loading All Model Tools on Startup
 try:
     print("Loading model and feature tools...")
     model = joblib.load('phishing_model.joblib')
@@ -28,11 +29,9 @@ try:
 except FileNotFoundError:
     print("ERROR: Model or tool files not found.")
     print("Make sure all .joblib files are in the same directory.")
-    model = None # Set to None to handle errors gracefully
+    model = None
 
-# --- 3. Re-create the Feature Engineering Pipeline ---
-# This section MUST be identical to create_features.py
-
+#Feature Engineering Pipeline
 def get_domain(email_address):
     if not isinstance(email_address, str):
         return None
@@ -113,7 +112,7 @@ def extract_all_features(raw_email):
     features['subject'] = subject
     features['body'] = body
     
-    # --- Header Heuristics ---
+    #Header Heuristics
     received_headers = msg.get_all('Received', [])
     features['hop_count'] = len(received_headers)
     from_addr = msg.get('From', '')
@@ -122,19 +121,14 @@ def extract_all_features(raw_email):
     features['has_x_mailer'] = 1 if msg.get('X-Mailer') else 0
     features['has_message_id'] = 1 if msg.get('Message-ID') else 0
     
-    # --- Content Heuristics ---
+    #Content Heuristics
     features['is_html'] = is_html
     features['link_count'] = body.count('http://') + body.count('https://') + body.count('href=')
     features['keyword_count'] = len(SPAM_REGEX.findall(body))
     features['obfuscation_count'] = len(OBFUSCATION_REGEX.findall(body))
     features['subject_all_caps'] = 1 if (subject and subject.isupper() and len(subject) > 5) else 0
-
-    # Return as a DataFrame to keep column order
     return pd.DataFrame([features])
 
-
-# --- 4. Define API Contract (Input and Output) ---
-# This matches our API Contract document perfectly
 
 class EmailInput(BaseModel):
     raw_email: str
@@ -143,7 +137,7 @@ class PredictionOutput(BaseModel):
     is_phishing: bool
     phishing_probability: float
 
-# --- 5. Create the Prediction Endpoint ---
+#End Point
 @app.post("/predict", response_model=PredictionOutput)
 async def predict_phishing(email_input: EmailInput):
     """
@@ -175,7 +169,7 @@ async def predict_phishing(email_input: EmailInput):
     probability = model.predict_proba(X_new)[0][1] # Get prob_spam
     
     # 7. Get boolean prediction
-    is_phish = bool(probability > 0.7) # Use a 70% threshold
+    is_phish = bool(probability > THRESHOLD) # Use a 70% threshold
     
     # 8. Return the result
     return PredictionOutput(
