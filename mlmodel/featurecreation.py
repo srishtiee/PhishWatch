@@ -12,10 +12,8 @@ import numpy as np
 import warnings
 import scipy
 
-# Suppress warnings for cleaner output
+# Suppresses warnings for cleaner output
 warnings.filterwarnings('ignore')
-
-# Set tqdm to work nicely with pandas apply
 tqdm.pandas()
 
 def get_domain(email_address):
@@ -37,21 +35,18 @@ def get_body_and_subject(raw_email):
     is_html = 0
     
     try:
-        # We need to use latin-1 encoding
+        #latin-1 encoding
         msg = email.message_from_bytes(raw_email.encode('latin-1'), policy=default) 
         subject = str(msg.get('Subject', ''))
         
         if msg.is_multipart():
-            # Walk through all parts of the email
             for part in msg.walk():
                 ctype = part.get_content_type()
                 cdispo = str(part.get('Content-Disposition'))
-
-                # Look for plain text first
                 if ctype == 'text/plain' and 'attachment' not in cdispo:
                     charset = part.get_content_charset() or 'latin-1'
                     body = part.get_payload(decode=True).decode(charset, errors='ignore')
-                    break # Found plain text, stop
+                    break
             
             # If no plain text, look for HTML
             if body is None:
@@ -64,7 +59,7 @@ def get_body_and_subject(raw_email):
                         charset = part.get_content_charset() or 'latin-1'
                         html_body = part.get_payload(decode=True).decode(charset, errors='ignore')
                         soup = BeautifulSoup(html_body, 'html.parser')
-                        body = soup.get_text() # Extract text from HTML
+                        body = soup.get_text()
                         break
         else:
             # Not multipart, just get the payload
@@ -96,7 +91,7 @@ def get_body_and_subject(raw_email):
     return subject, body, is_html
 
 
-# --- 2. Master Feature Extraction Function ---
+#Master Feature Extraction Function
 
 SPAM_KEYWORDS = [
     'free', 'viagra', 'money', 'urgent', 'win', 'winner', 'limited time', 
@@ -113,19 +108,15 @@ def extract_all_features(raw_email):
     """
     features = {}
     
-    # --- Parse Core Components ---
     try:
         msg = email.message_from_bytes(raw_email.encode('latin-1'), policy=default)
         subject, body, is_html = get_body_and_subject(raw_email)
     except Exception:
-        # If parsing fails, return empty features for all
         subject, body, is_html = "", "", 0
         msg = email.message_from_string("") # Create empty object
     
     features['subject'] = subject
     features['body'] = body
-
-    # --- Header Heuristics (Professor's Spec) ---
     received_headers = msg.get_all('Received', [])
     features['hop_count'] = len(received_headers)
     
@@ -136,7 +127,6 @@ def extract_all_features(raw_email):
     features['has_x_mailer'] = 1 if msg.get('X-Mailer') else 0
     features['has_message_id'] = 1 if msg.get('Message-ID') else 0
     
-    # --- Content Heuristics (Our Pivot Idea) ---
     features['is_html'] = is_html
     features['link_count'] = body.count('http://') + body.count('https://') + body.count('href=')
     features['keyword_count'] = len(SPAM_REGEX.findall(body))
@@ -146,49 +136,35 @@ def extract_all_features(raw_email):
     return pd.Series(features)
 
 
-# --- 3. Main Orchestration Script ---
+#Orchestration Script
 
 def main():
-    # --- 3a: Load Master Dataset ---
     print("Loading spamassassin_master.csv...")
     try:
         df = pd.read_csv('./dataset/spamassassin_master.csv')
     except FileNotFoundError:
         print("Error: 'spamassassin_master.csv' not found.")
-        print("Please run the Step 1 script first.")
         return
         
     df.dropna(subset=['message'], inplace=True)
     print(f"Loaded {len(df)} emails.")
     
-    # --- 3b: Apply Feature Extraction ---
-    print("Applying feature extraction to all emails... (This will take a few minutes)")
-    # This applies our `extract_all_features` function to every row
+    #Feature Extraction ---
+    print("Applying feature extraction to all emails...")
     features_df = df['message'].progress_apply(extract_all_features)
-    
-    # Join the new feature columns back to the original DataFrame
     df = pd.concat([df, features_df], axis=1)
     
-    # --- 3c: Vectorize Text Features ---
-    print("Vectorizing Subject and Body text...")
-    
-    # Fill any new empty text fields
+    #Vectorize Text Features 
     df['subject'] = df['subject'].fillna('')
     df['body'] = df['body'].fillna('')
 
-    # Initialize TF-IDF Vectorizers
-    # We limit features to keep the dataset size manageable
     subject_vec = TfidfVectorizer(stop_words='english', max_features=1000, ngram_range=(1,2))
     body_vec = TfidfVectorizer(stop_words='english', max_features=5000)
     
-    # Fit and transform the text
     subject_features = subject_vec.fit_transform(df['subject'])
     body_features = body_vec.fit_transform(df['body'])
     
-    # --- 3d: Combine All Features ---
-    print("Combining all features into final matrices...")
-    
-    # Define the list of heuristic columns we created
+    #Combine All Features
     heuristic_cols = [
         'hop_count', 'is_mismatch', 'has_x_mailer', 'has_message_id',
         'is_html', 'link_count', 'keyword_count', 'obfuscation_count',
@@ -208,8 +184,7 @@ def main():
     print(f"Final feature matrix shape (rows, features): {X_final.shape}")
     print(f"Final target vector shape (rows,): {y_final.shape}")
 
-    # --- 3e: Save All Model-Ready Files ---
-    print("Saving all model-ready files...")
+    #Save All Model-Ready Files
     
     # 1. Save the final X and y files for training
     scipy.sparse.save_npz('X_features.npz', X_final)
@@ -219,15 +194,5 @@ def main():
     joblib.dump(subject_vec, 'subject_vectorizer.joblib')
     joblib.dump(body_vec, 'body_vectorizer.joblib')
     joblib.dump(heuristic_cols, 'heuristic_columns.joblib')
-    
-    print("\n--- Success! ---")
-    print("Created the following files:")
-    print("  - X_features.npz (Your 'X' data for training)")
-    print("  - y_target.pkl (Your 'y' labels for training)")
-    print("  - subject_vectorizer.joblib (Tool for your API)")
-    print("  - body_vectorizer.joblib (Tool for your API)")
-    print("  - heuristic_columns.joblib (Tool for your API)")
-    print("\nYou are now ready for Step 3: Model Training.")
-
 if __name__ == "__main__":
     main()
